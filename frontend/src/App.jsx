@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 function App() {
   const [workouts, setWorkouts] = useState([]);
@@ -20,7 +21,7 @@ function App() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    fetch("http://127.0.0.1:5000/workout", {
+    fetch(`${API_BASE}/workout`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -34,11 +35,12 @@ function App() {
     })
       .then((res) => res.json())
       .then(() => {
-        return fetch("http://127.0.0.1:5000/workouts/Satyam");
+        return fetch(`${API_BASE}/workouts/Satyam`);
       })
       .then((res) => res.json())
       .then((data) => {
         setWorkouts(data.workouts || []);
+        fetchRecommendations();
         setFormData({
           workout_type: "",
           duration_minutes: "",
@@ -47,8 +49,24 @@ function App() {
       })
       .catch((err) => console.error(err));
   };
+
+  const fetchRecommendations = () => {
+  setRecLoading(true);
+  fetch(`${API_BASE}/ai/recommendations/Satyam`)
+    .then((res) => res.json())
+    .then((data) => {
+      setRecommendations(data.data?.recommendations || []);
+      setRecLoading(false);
+    })
+    .catch((err) => {
+      console.error(err);
+      setRecLoading(false);
+    });
+};
+
+
   useEffect(() => {
-    fetch("http://127.0.0.1:5000/workouts/Satyam")
+    fetch(`${API_BASE}/workouts/Satyam`)
       .then((res) => res.json())
       .then((data) => {
         console.log("API DATA:", data);
@@ -62,18 +80,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    fetch("http://127.0.0.1:5000/ai/recommendations/Satyam")
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("AI RESPONSE:", data);
-        setRecommendations(data.data?.recommendations || []);
-        setRecLoading(false);
-      })
-      .catch((err) => {
-        console.error(err);
-        setRecLoading(false);
-      });
-  }, []);
+  fetchRecommendations();
+}, []);
 
   if (loading) return <h2>Loading workouts...</h2>;
 
@@ -116,7 +124,7 @@ function App() {
       </form>
       <h2>AI Recommendations</h2>
 
-      {recLoading && <p>Analyzing your performance...</p>}
+      {recLoading && <p>🤖 AI is analyzing your workouts...</p>}
 
       {!recLoading && recommendations.length === 0 && (
         <p>No recommendations available.</p>
