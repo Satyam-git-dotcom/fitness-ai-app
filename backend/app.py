@@ -1,3 +1,4 @@
+from flask_cors import CORS
 from flask import Flask, jsonify, request
 from pymongo import MongoClient
 from dotenv import load_dotenv
@@ -7,6 +8,7 @@ import certifi
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
 
 # MongoDB connection
 mongo_uri = os.getenv("MONGO_URI")
@@ -19,6 +21,21 @@ db = client["fitness_db"]
 users_collection = db["users"]
 workouts_collection = db["workouts"]
 
+def success_response(data=None, message="Success"):
+    return jsonify({
+        "success": True,
+        "message": message,
+        "data": data
+    })
+
+def error_response(message="Error", status_code=400):
+    return jsonify({
+        "success": False,
+        "message": message,
+        "data": None
+    }), status_code
+
+
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "OK", "db": "connected"})
@@ -27,17 +44,26 @@ def health_check():
 def log_workout():
     data = request.json
 
+    required_fields = ["user_name", "date", "workout_type", "duration_minutes"]
+
+    for field in required_fields:
+        if field not in data or data[field] is None:
+            return error_response(f"Missing required field: {field}")
+
+    if not isinstance(data["duration_minutes"], int) or data["duration_minutes"] <= 0:
+        return error_response("Duration must be a positive integer")
+
     workout = {
-        "user_name": data.get("user_name"),
-        "date": data.get("date"),
-        "workout_type": data.get("workout_type"),
-        "exercises": data.get("exercises"),
-        "duration_minutes": data.get("duration_minutes")
+        "user_name": data["user_name"],
+        "date": data["date"],
+        "workout_type": data["workout_type"],
+        "exercises": data.get("exercises", []),
+        "duration_minutes": data["duration_minutes"]
     }
 
     workouts_collection.insert_one(workout)
 
-    return jsonify({"message": "Workout logged successfully"}), 201
+    return success_response(message="Workout logged successfully")
 
 @app.route("/workouts/<username>", methods=["GET"])
 def get_user_workouts(username):
@@ -51,6 +77,17 @@ def get_user_workouts(username):
         "workouts": workouts
     })
 
+
+MUSCLE_GROUPS = {
+    "Bench Press": "chest",
+    "Push Ups": "chest",
+    "Squats": "legs",
+    "Deadlift": "back",
+    "Pull Ups": "back",
+    "Bicep Curl": "arms",
+    "Tricep Dips": "arms",
+    "Shoulder Press": "shoulders"
+}
 def analyze_workouts(workouts):
     analysis = []
 
@@ -63,30 +100,84 @@ def analyze_workouts(workouts):
     if total_workouts < 3:
         analysis.append("Low workout consistency. Aim for at least 3 workouts per week.")
 
-    avg_duration = sum(w["duration_minutes"] for w in workouts) / total_workouts
+    total_duration = sum(w["duration_minutes"] for w in workouts)
+    avg_duration = total_duration / total_workouts
 
     if avg_duration < 30:
-        analysis.append("Your workout duration is low. Consider training for 45–60 minutes.")
+        analysis.append("Your workout duration is low. Aim for 45–60 minutes per session.")
 
     if avg_duration > 90:
-        analysis.append("You may be overtraining. Ensure proper recovery.")
+        analysis.append("You may be overtraining. Consider adding rest days.")
+
+    # Muscle group balance
+    muscle_count = {}
+
+    for workout in workouts:
+        for ex in workout.get("exercises", []):
+            muscle = MUSCLE_GROUPS.get(ex["name"])
+            if muscle:
+                muscle_count[muscle] = muscle_count.get(muscle, 0) + 1
+
+    if muscle_count:
+        min_muscle = min(muscle_count, key=muscle_count.get)
+        max_muscle = max(muscle_count, key=muscle_count.get)
+
+        if muscle_count[max_muscle] >= 2 * muscle_count[min_muscle]:
+            analysis.append(
+                f"Training imbalance detected. You focus more on {max_muscle} than {min_muscle}."
+            )
 
     return analysis
 
 @app.route("/ai/recommendations/<username>", methods=["GET"])
 def ai_recommendations(username):
+    try:
+        workouts = list(workouts_collection.find(
+            {"user_name": username},
+            {"_id": 0}
+        ))
+
+        recommendations = analyze_workouts(workouts)
+
+        return success_response({
+            "user": username,
+            "recommendations": recommendations
+        })
+
+    except Exception as e:
+        return error_response("AI processing failed", 500)
+
+from datetime import datetime, timedelta
+
+@app.route("/api/v1/analytics/weekly/<username>", methods=["GET"])
+def weekly_analytics(username):
+    seven_days_ago = datetime.now() - timedelta(days=7)
+
     workouts = list(workouts_collection.find(
-        {"user_name": username},
+        {
+            "user_name": username,
+            "date": {"$gte": seven_days_ago.strftime("%Y-%m-%d")}
+        },
         {"_id": 0}
     ))
 
-    recommendations = analyze_workouts(workouts)
+    total_workouts = len(workouts)
+    total_minutes = sum(w["duration_minutes"] for w in workouts) if workouts else 0
+    avg_duration = total_minutes / total_workouts if total_workouts else 0
+
+    status = "Good progress"
+    if total_workouts < 3:
+        status = "Low activity"
+    elif avg_duration < 30:
+        status = "Workouts too short"
 
     return jsonify({
         "user": username,
-        "recommendations": recommendations
+        "weekly_workouts": total_workouts,
+        "total_minutes": total_minutes,
+        "average_duration": round(avg_duration, 1),
+        "status": status
     })
-
 
 if __name__ == "__main__":
     app.run(debug=True)
