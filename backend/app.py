@@ -17,26 +17,27 @@ client = MongoClient(
 )
 db = client["fitness_db"]
 users_collection = db["users"]
+workouts_collection = db["workouts"]
 
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "OK", "db": "connected"})
 
-@app.route("/register", methods=["POST"])
-def register_user():
+@app.route("/workout", methods=["POST"])
+def log_workout():
     data = request.json
 
-    user = {
-        "name": data.get("name"),
-        "age": data.get("age"),
-        "height": data.get("height"),
-        "weight": data.get("weight"),
-        "goal": data.get("goal")
+    workout = {
+        "user_name": data.get("user_name"),
+        "date": data.get("date"),
+        "workout_type": data.get("workout_type"),
+        "exercises": data.get("exercises"),
+        "duration_minutes": data.get("duration_minutes")
     }
 
-    users_collection.insert_one(user)
+    workouts_collection.insert_one(workout)
 
-    return jsonify({"message": "User registered successfully"}), 201
+    return jsonify({"message": "Workout logged successfully"}), 201
 
 if __name__ == "__main__":
     app.run(debug=True)
