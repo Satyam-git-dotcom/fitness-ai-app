@@ -6,6 +6,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [recommendations, setRecommendations] = useState([]);
   const [recLoading, setRecLoading] = useState(true);
+  const [aiScore, setAiScore] = useState(null);
   const [formData, setFormData] = useState({
     workout_type: "",
     duration_minutes: "",
@@ -56,6 +57,7 @@ function App() {
     .then((res) => res.json())
     .then((data) => {
       setRecommendations(data.data?.recommendations || []);
+      setAiScore(data.data?.score ?? null);
       setRecLoading(false);
     })
     .catch((err) => {
@@ -123,6 +125,11 @@ function App() {
         <button type="submit">Add Workout</button>
       </form>
       <h2>AI Recommendations</h2>
+      {aiScore !== null && (
+        <div style={{ marginBottom: "10px", fontWeight: "bold" }}>
+          🏆 AI Performance Score: {aiScore}/100
+        </div>
+      )}
 
       {recLoading && <p>🤖 AI is analyzing your workouts...</p>}
 
