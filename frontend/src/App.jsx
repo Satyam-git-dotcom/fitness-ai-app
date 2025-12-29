@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 function App() {
   const [workouts, setWorkouts] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  const [recommendations, setRecommendations] = useState([]);
+  const [recLoading, setRecLoading] = useState(true);
   const [formData, setFormData] = useState({
     workout_type: "",
     duration_minutes: "",
@@ -60,6 +61,20 @@ function App() {
       });
   }, []);
 
+  useEffect(() => {
+    fetch("http://127.0.0.1:5000/ai/recommendations/Satyam")
+      .then((res) => res.json())
+      .then((data) => {
+        console.log("AI RESPONSE:", data);
+        setRecommendations(data.data?.recommendations || []);
+        setRecLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setRecLoading(false);
+      });
+  }, []);
+
   if (loading) return <h2>Loading workouts...</h2>;
 
   return (
@@ -99,7 +114,19 @@ function App() {
 
         <button type="submit">Add Workout</button>
       </form>
+      <h2>AI Recommendations</h2>
 
+      {recLoading && <p>Analyzing your performance...</p>}
+
+      {!recLoading && recommendations.length === 0 && (
+        <p>No recommendations available.</p>
+      )}
+
+      <ul>
+        {recommendations.map((rec, index) => (
+          <li key={index}>{rec}</li>
+        ))}
+      </ul>
       <h1>My Workouts</h1>
 
       {workouts.length === 0 && <p>No workouts logged.</p>}
