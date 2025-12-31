@@ -44,21 +44,36 @@ def health_check():
 def log_workout():
     data = request.json
 
-    required_fields = ["user_name", "date", "workout_type", "duration_minutes"]
+    required_fields = ["user_name", "workout_name", "date", "exercises"]
 
     for field in required_fields:
         if field not in data or data[field] is None:
             return error_response(f"Missing required field: {field}")
 
-    if not isinstance(data["duration_minutes"], int) or data["duration_minutes"] <= 0:
-        return error_response("Duration must be a positive integer")
+    if not isinstance(data["exercises"], list) or len(data["exercises"]) == 0:
+        return error_response("Exercises must be a non-empty list")
+
+    validated_exercises = []
+
+    for ex in data["exercises"]:
+        if not all(k in ex for k in ("name", "sets", "reps")):
+            return error_response(
+                "Each exercise must have name, sets, and reps"
+            )
+
+        validated_exercises.append({
+            "name": ex["name"],
+            "sets": int(ex["sets"]),
+            "reps": int(ex["reps"]),
+            "weight": ex.get("weight")
+        })
 
     workout = {
         "user_name": data["user_name"],
+        "workout_name": data["workout_name"],
         "date": data["date"],
-        "workout_type": data["workout_type"],
-        "exercises": data.get("exercises", []),
-        "duration_minutes": data["duration_minutes"]
+        "exercises": validated_exercises,
+        "created_at": datetime.utcnow()
     }
 
     workouts_collection.insert_one(workout)
@@ -139,8 +154,27 @@ def ai_recommendations(username):
 
         recommendations = analyze_workouts(workouts)
 
+        # AI performance score calculation
+        score = 100
+        total_workouts = len(workouts)
+
+        if total_workouts < 3:
+            score -= 30
+
+        if total_workouts > 0:
+            total_duration = sum(w["duration_minutes"] for w in workouts)
+            avg_duration = total_duration / total_workouts
+
+            if avg_duration < 30:
+                score -= 20
+            elif avg_duration > 90:
+                score -= 10
+
+        score = max(score, 0)
+
         return success_response({
             "user": username,
+            "score": score,
             "recommendations": recommendations
         })
 
