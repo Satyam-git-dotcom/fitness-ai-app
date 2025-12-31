@@ -41,6 +41,33 @@ def error_response(message="Error", status_code=400):
 def health_check():
     return jsonify({"status": "OK", "db": "connected"})
 
+@app.route("/user", methods=["POST"])
+def create_or_update_user():
+    data = request.json
+
+    required_fields = ["user_name", "age", "height_cm", "weight_kg", "goal"]
+
+    for field in required_fields:
+        if field not in data:
+            return error_response(f"Missing field: {field}")
+
+    user = {
+        "user_name": data["user_name"],
+        "age": data["age"],
+        "height_cm": data["height_cm"],
+        "weight_kg": data["weight_kg"],
+        "goal": data["goal"],
+        "experience_level": data.get("experience_level", "beginner")
+    }
+
+    users_collection.update_one(
+        {"user_name": data["user_name"]},
+        {"$set": user},
+        upsert=True
+    )
+
+    return success_response(user, "User profile saved")
+
 @app.route("/workout", methods=["POST"])
 def log_workout():
     data = request.json
