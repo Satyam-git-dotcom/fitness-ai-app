@@ -2,6 +2,7 @@ from flask_cors import CORS
 from flask import Flask, jsonify, request
 from pymongo import MongoClient
 from dotenv import load_dotenv
+from bson import ObjectId
 import os
 import certifi
 
@@ -79,6 +80,21 @@ def log_workout():
     workouts_collection.insert_one(workout)
 
     return success_response(message="Workout logged successfully")
+
+@app.route("/workout/<workout_id>", methods=["DELETE"])
+def delete_workout(workout_id):
+    try:
+        result = workouts_collection.delete_one(
+            {"_id": ObjectId(workout_id)}
+        )
+
+        if result.deleted_count == 0:
+            return error_response("Workout not found", 404)
+
+        return success_response(message="Workout deleted successfully")
+
+    except Exception as e:
+        return error_response("Invalid workout ID", 400)
 
 @app.route("/workouts/<username>", methods=["GET"])
 def get_user_workouts(username):
