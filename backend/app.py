@@ -5,11 +5,22 @@ from dotenv import load_dotenv
 from bson import ObjectId
 import os
 import certifi
+from flask_jwt_extended import (
+    JWTManager, create_access_token,
+    jwt_required, get_jwt_identity
+)
+import bcrypt
+from datetime import timedelta
 
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET", "super-secret-key")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=7)
+
+jwt = JWTManager(app)
 
 # MongoDB connection
 mongo_uri = os.getenv("MONGO_URI")
@@ -41,6 +52,72 @@ def error_response(message="Error", status_code=400):
 def health_check():
     return jsonify({"status": "OK", "db": "connected"})
 
+@app.route("/auth/signup", methods=["POST"])
+def signup():
+    data = request.json
+
+    required = ["username", "email", "password"]
+    for field in required:
+        if field not in data:
+            return error_response(f"Missing {field}")
+
+    if users_collection.find_one({"email": data["email"]}):
+        return error_response("User already exists")
+
+    hashed_pw = bcrypt.hashpw(
+        data["password"].encode("utf-8"),
+        bcrypt.gensalt()
+    )
+
+    user = {
+        "username": data["username"],
+        "email": data["email"],
+        "password": hashed_pw,
+        "created_at": datetime.utcnow()
+    }
+
+    users_collection.insert_one(user)
+
+    return success_response(message="User registered successfully")
+
+@app.route("/auth/login", methods=["POST"])
+def login():
+    data = request.json
+
+    user = users_collection.find_one({"email": data.get("email")})
+    if not user:
+        return error_response("Invalid credentials", 401)
+
+    if not bcrypt.checkpw(
+        data["password"].encode("utf-8"),
+        user["password"]
+    ):
+        return error_response("Invalid credentials", 401)
+
+    token = create_access_token(identity=str(user["_id"]))
+
+    return success_response({
+        "token": token,
+        "username": user["username"]
+    })
+
+@app.route("/workout", methods=["POST"])
+@jwt_required()
+def log_workout():
+    user_id = get_jwt_identity()
+    data = request.json
+
+    workout = {
+        "user_id": user_id,
+        "date": data["date"],
+        "workout_type": data["workout_type"],
+        "exercises": data.get("exercises", []),
+        "duration_minutes": data["duration_minutes"]
+    }
+
+    workouts_collection.insert_one(workout)
+    return success_response("Workout logged")
+
 @app.route("/user", methods=["POST"])
 def create_or_update_user():
     data = request.json
@@ -68,45 +145,45 @@ def create_or_update_user():
 
     return success_response(user, "User profile saved")
 
-@app.route("/workout", methods=["POST"])
-def log_workout():
-    data = request.json
+# @app.route("/workout", methods=["POST"])
+# def log_workout():
+#     data = request.json
 
-    required_fields = ["user_name", "workout_name", "date", "exercises"]
+#     required_fields = ["user_name", "workout_name", "date", "exercises"]
 
-    for field in required_fields:
-        if field not in data or data[field] is None:
-            return error_response(f"Missing required field: {field}")
+#     for field in required_fields:
+#         if field not in data or data[field] is None:
+#             return error_response(f"Missing required field: {field}")
 
-    if not isinstance(data["exercises"], list) or len(data["exercises"]) == 0:
-        return error_response("Exercises must be a non-empty list")
+#     if not isinstance(data["exercises"], list) or len(data["exercises"]) == 0:
+#         return error_response("Exercises must be a non-empty list")
 
-    validated_exercises = []
+#     validated_exercises = []
 
-    for ex in data["exercises"]:
-        if not all(k in ex for k in ("name", "sets", "reps")):
-            return error_response(
-                "Each exercise must have name, sets, and reps"
-            )
+#     for ex in data["exercises"]:
+#         if not all(k in ex for k in ("name", "sets", "reps")):
+#             return error_response(
+#                 "Each exercise must have name, sets, and reps"
+#             )
 
-        validated_exercises.append({
-            "name": ex["name"],
-            "sets": int(ex["sets"]),
-            "reps": int(ex["reps"]),
-            "weight": ex.get("weight")
-        })
+#         validated_exercises.append({
+#             "name": ex["name"],
+#             "sets": int(ex["sets"]),
+#             "reps": int(ex["reps"]),
+#             "weight": ex.get("weight")
+#         })
 
-    workout = {
-        "user_name": data["user_name"],
-        "workout_name": data["workout_name"],
-        "date": data["date"],
-        "exercises": validated_exercises,
-        "created_at": datetime.utcnow()
-    }
+#     workout = {
+#         "user_name": data["user_name"],
+#         "workout_name": data["workout_name"],
+#         "date": data["date"],
+#         "exercises": validated_exercises,
+#         "created_at": datetime.utcnow()
+#     }
 
-    workouts_collection.insert_one(workout)
+#     workouts_collection.insert_one(workout)
 
-    return success_response(message="Workout logged successfully")
+#     return success_response(message="Workout logged successfully")
 
 @app.route("/workout/<workout_id>", methods=["DELETE"])
 def delete_workout(workout_id):
