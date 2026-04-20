@@ -73,5 +73,5 @@ User → Frontend (React) → Backend (Flask API) → Database (MongoDB)
 ---
 
 ## 👨‍💻 Author
-**Satyam Vishwakarma**  
+**Satyam**  
 B.Tech AIML Student
