@@ -5,7 +5,24 @@ export default {
     "./src/**/*.{js,jsx,ts,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        primary: {
+          DEFAULT: "#10b981", // Emerald-500
+          light: "#34d399",
+          dark: "#059669",
+        },
+        zinc: {
+          950: "#09090b",
+        },
+      },
+      fontFamily: {
+        sans: ["Outfit", "sans-serif"],
+      },
+      backdropBlur: {
+        xs: "2px",
+      },
+    },
   },
   plugins: [],
 };
